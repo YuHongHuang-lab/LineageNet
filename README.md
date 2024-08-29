@@ -26,5 +26,6 @@ LineageNet. LineageNet includes the following three components:
 # Installation
 
 You can install the development version of LineageNet like so: install
-from github: \#devtools::install_github(“YuHongHuang-lab/IWHMB”)
-\#download from github
+from github:
+
+devtools::install_github(“YuHongHuang-lab/LineageNet”)
