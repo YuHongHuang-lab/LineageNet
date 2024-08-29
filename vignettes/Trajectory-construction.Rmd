@@ -1,0 +1,134 @@
+---
+title: "Trajectory-construction"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Trajectory-construction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+# 1 Data preprocessing
+
+## 1.1 set R library loaction and load packages
+
+```{r eval=TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+.libPaths('~/R/x86_64-pc-linux-gnu-library/4.3/')
+library(ggplot2)
+library(devtools)
+library(tidyverse)
+library(pheatmap)
+```
+
+## 1.2 load LineageNet
+
+```{r eval=TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+library(LineageNet)
+```
+
+## 1.3 set color
+
+```{r eval=TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+my_pal_science6 = c("#A9CA70","#C5D6F0","#F18C54",
+                    "#9B59B6","#F7CAC9","#76D7C4")
+```
+
+## 1.4 load test data
+We give the processed snRNA-seq data for E10 and E11 (see [Data-preprocessing-and-cell-annotation for processing](./vignettes/Data-preprocessing-and-cell-annotation.Rmd)) for Wot analysis
+```{r eval=TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+data("bad_genes")
+seob_E10_Mand_flow = readRDS(file = "/mnt/data/home/tycloud/workspace/scATAC/data/E10_Mand_WT_CNCC_Flow_tmp_scRNA_seq.rds")
+seob_E11_Mand_flow = readRDS(file = "/mnt/data/home/tycloud/workspace/scATAC/data/E11_Mand_WT_CNCC_Flow_tmp_scRNA_seq.rds")
+
+
+```
+
+
+# 2 integrated
+Wot analysis requires the downscaling of two temporal data that need to be inferred to the same space
+
+```{r eval=TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+seob_E10_Mand_E11_Mand = RunSeurat(seob = list("E10_Mand"=seob_E10_Mand_flow,
+                                               "E11_Mand"=seob_E11_Mand_flow),
+                                   split_by="sample",
+                                   integrated="RPCA",
+                                   coln_add = "all",
+                                   cellid_add = F,
+                                   cellid=NULL,
+                                   nfeatures=3000,
+                                   outfeatures = bad_genes,
+                                   npcs=20,
+                                   min_batch_num = 100,
+                                   resolution=0.2,
+                                   k_anchor=1,
+                                   k_score = 120,
+                                   k_filter = 600,
+                                   k_weight = 100,
+                                   use_old_RNA = F,
+                                   use_old_Seurat = F)
+seob_E10_Mand_E11_Mand@meta.data$celltype_velocyto = str_c(seob_E10_Mand_E11_Mand@meta.data$sample,
+                                                           seob_E10_Mand_E11_Mand@meta.data$celltype,
+                                                           sep = "_")
+
+seob_E10_Mand_E11_Mand@meta.data$time = ifelse(seob_E10_Mand_E11_Mand@meta.data$sample%in%"E10_Mand",1,2)
+```
+## 2.1 Check integration results
+```{r eval=TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+DimPlot(seob_E10_Mand_E11_Mand, reduction = "umap", group.by = "sample",label = T)
+DimPlot(seob_E10_Mand_E11_Mand, reduction = "umap", group.by = "celltype_velocyto",label = T)
+```
+
+## 2.2 Save Seurat as an anndata object and use wot to complete trajectory inference
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+reticulate::use_condaenv("/mnt/data/home/tycloud/software/anaconda3/envs/scFates/")
+Sys.setenv(RETICULATE_PYTHON = "/mnt/data/home/tycloud/software/anaconda3/envs/scFates/bin/python3")
+seurat2anndata(obj = seob_E10_Mand_E11_Mand,
+               outFile = "/mnt/data/home/tycloud/workspace/scATAC/data/E10_Mand_E11_Mand_WT_CNCC_SCT_Waddington_OT_scRNA_seq.h5ad",
+               slot = 'data', main_layer = 'RNA',
+               transfer_layers = NULL,
+               drop_single_values = FALSE)
+```
+# 3 Completing trajectory construction with wot in python environment
+Where Wot_path needs to replace the script we provided with your own path
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+python_path = "/mnt/data/home/tycloud/mambaforge/envs/cellrank3/bin/python"
+Wot_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/Wot.py"
+input_file = "/mnt/data/home/tycloud/workspace/scATAC/data/E10_Mand_E11_Mand_WT_CNCC_SCT_Waddington_OT_scRNA_seq.h5ad"
+out_file = "/mnt/data/home/tycloud/workspace/scATAC/data/Waddington_OT_E10_Mand_E11_Mand.csv"
+
+execute_py(python_path = python_path,
+           script_path = Wot_path,
+           input_file=input_file,
+           out_file=out_file)
+```
+
+## 3.1 plot reseult
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+Tab_Wot = read.csv(out_file)%>%column_to_rownames(var = "X")
+pheatmap(Tab_Wot,
+         cluster_rows = F,
+         cluster_cols = F)
+```
+
+## 3.2 plot all time wot result
+Here we provide test results for all adjacent period pairs of wot and visualize the
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+load(file = "/mnt/data/home/tycloud/workspace/scATAC/data/trajectory_DAG.RData")
+plot_trajectory_DAG(Tab_l = Tab_list_Wot,
+                    Tab_l2 = NULL,
+                    node_df = cell_df,
+                    color_by="color",
+                    cellid_by="cellid",
+                    scale_ = NULL,
+                    cut_ = 0.0,
+                    order_ = rev(cell_df$cellid),
+                    node_size = 2,
+                    x_size = 3,
+                    y_size = 3,
+                    width_top = 0.5,
+                    alpha_min = 0.5,
+                    width_min = 0.3,
+                    width_max = 0.8,
+                    edge_color = c("#136783"),
+                    node_color = my_pal_science5)
+```
+
+

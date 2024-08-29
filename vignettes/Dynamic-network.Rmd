@@ -1,0 +1,284 @@
+---
+title: "Dynamic-network"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Dynamic-network}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# 1 Data preprocess
+
+Here we utilize [human peripherology single-cell multi-omics](https://www.10xgenomics.com/datasets/pbmc-from-a-healthy-donor-granulocytes-removed-through-cell-sorting-10-k-1-standard-2-0-0) from 10X Genomics for demonstration, and the mouse mandibular data from this project are still being analyzed
+
+## 1.1 set R library loaction and load packages
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+.libPaths('~/R/x86_64-pc-linux-gnu-library/4.3/')
+reticulate::use_condaenv("/mnt/data/home/tycloud/software/anaconda3/envs/scFates/")
+Sys.setenv(RETICULATE_PYTHON = "/mnt/data/home/tycloud/software/anaconda3/envs/scFates/bin/python3")
+library(data.table)
+library(Signac)
+library(Seurat)
+library(EnsDb.Hsapiens.v75)
+library(ggplot2)
+library(patchwork)
+library(tidyverse)
+library(slingshot)
+library(JASPAR2024)
+library(TFBSTools)
+```
+
+## 1.2 load LineageNet
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+library(LineageNet)
+```
+
+## 1.3 snRNA-seq
+
+The preprocessing and analysis of snRNA-seq is explained in [Data-preprocessing-and-cell-annotation](./vignettes/Data-preprocessing-and-cell-annotation.Rmd), and here we directly give the example data after processing
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+seob_T = readRDS(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_T.rds")
+```
+
+## 1.4 snATAC
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+counts <- Read10X_h5(filename = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/pbmc_granulocyte_sorted_10k_filtered_feature_bc_matrix.h5")
+counts = counts$Peaks
+metadata <- read.csv(
+  file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/pbmc_granulocyte_sorted_10k_per_barcode_metrics.csv",
+  header = TRUE,
+  row.names = 1
+)
+
+chrom_assay <- CreateChromatinAssay(
+  counts = counts,
+  sep = c(":", "-"),
+  fragments = '/mnt/data/home/tycloud/workspace/algorithms_raw/data/pbmc_granulocyte_sorted_10k_atac_fragments.tsv.gz',
+  min.cells = 10,
+  min.features = 200
+)
+
+pbmc <- CreateSeuratObject(
+  counts = chrom_assay,
+  assay = "peaks",
+  meta.data = metadata
+)
+
+# extract gene annotations from EnsDb
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v75)
+
+# change to UCSC style since the data was mapped to hg19
+seqlevels(annotations) <- paste0('chr', seqlevels(annotations))
+genome(annotations) <- "hg19"
+
+Annotation(pbmc) <- annotations
+
+# compute nucleosome signal score per cell
+pbmc <- NucleosomeSignal(object = pbmc)
+
+# compute TSS enrichment score per cell
+pbmc <- TSSEnrichment(object = pbmc, fast = FALSE)
+
+# add blacklist ratio and fraction of reads in peaks
+pbmc$atac_passed_filters = pbmc$atac_raw_reads-
+  pbmc$atac_unmapped_reads - pbmc$atac_lowmapq-
+  pbmc$atac_dup_reads - pbmc$atac_chimeric_reads - 
+  pbmc$atac_mitochondrial_reads
+pbmc$atac_pct_reads_in_peaks <- (pbmc$atac_peak_region_fragments / pbmc$atac_passed_filters) * 100
+
+
+
+pbmc$high.tss <- ifelse(pbmc$TSS.enrichment > 3, 'High', 'Low')
+TSSPlot(pbmc, group.by = 'high.tss') + NoLegend()
+
+
+pbmc$nucleosome_group <- ifelse(pbmc$nucleosome_signal > 4, 'NS > 4', 'NS < 4')
+FragmentHistogram(object = pbmc, group.by = 'nucleosome_group')
+
+VlnPlot(
+  object = pbmc,
+  features = c('nCount_peaks', 'TSS.enrichment', 'blacklist_ratio', 'nucleosome_signal', 'atac_pct_reads_in_peaks'),
+  pt.size = 0.1,
+  ncol = 5
+)
+
+pbmc <- subset(
+  x = pbmc,
+  subset = nCount_peaks > 3000 &
+    nCount_peaks < 30000 &
+    atac_pct_reads_in_peaks > 15 &
+    nucleosome_signal < 4 &
+    TSS.enrichment > 1
+)
+pbmc
+
+```
+
+# 2 jratectory
+
+Here we simulate the process of T lymphocyte regeneration in human peripheral blood, where normal human peripherology consists of a small number of circulating stem cells that support T cell regeneration. [Mende et al.,*Blood*(2022).Jun 9;139(23):3387-3401.](https://ashpublications.org/blood/article/139/23/3387/483639/Unique-molecular-and-functional-features-of)
+
+## 2.1 select T cell
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+seob_ATAC_T = subset(pbmc, cells=colnames(seob_T))
+seob_ATAC_T@meta.data$celltype = seob_T@meta.data[rownames(seob_ATAC_T@meta.data),
+                                                  "celltype"]
+
+seob_ATAC_T <- RunTFIDF(seob_ATAC_T)
+seob_ATAC_T <- FindTopFeatures(seob_ATAC_T, min.cutoff = 'q75')
+seob_ATAC_T <- RunSVD(seob_ATAC_T)
+
+seob_ATAC_T <- RunUMAP(object = seob_ATAC_T, reduction = 'lsi', dims = 2:30)
+seob_ATAC_T <- FindNeighbors(object = seob_ATAC_T, reduction = 'lsi', dims = 2:30)
+seob_ATAC_T <- FindClusters(object = seob_ATAC_T, verbose = FALSE, algorithm = 3)
+gene.activities <- GeneActivity(seob_ATAC_T)
+seob_ATAC_T[['RNA']] <- CreateAssayObject(counts = gene.activities)
+
+seob_ATAC_T <- NormalizeData(
+  object = seob_ATAC_T,
+  assay = 'RNA',
+  normalization.method = 'LogNormalize',
+  scale.factor = median(seob_ATAC_T$nCount_RNA)
+)
+```
+
+## 2.2 Differential expression of Genes and peaks
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+#DEpeak
+Idents(seob_ATAC_T) = seob_ATAC_T@meta.data$celltype
+DEpeak = FindAllMarkers(seob_ATAC_T,
+                        Mandn.pct = 0.2,
+                        only.pos=TRUE,
+                        logfc.threshold = 0.1)
+DEpeak$de_pct = (DEpeak$pct.1-DEpeak$pct.2)/DEpeak$pct.1
+DEpeak = DEpeak[DEpeak$de_pct>0.3, ]
+HVpeak = VariableFeatures(seob_ATAC_T)
+
+peaks = unique(c(DEpeak$gene, HVpeak))
+Genes = unique(c(DEG$gene, HVG))
+```
+
+# 3 generate_prior gene network
+
+We utilize [Qiuyue Yuan, Zhana Duren., *Nat Biotechnol*(2024). Apr 12](https://www.nature.com/articles/s41587-024-02182-7) and [Wang et al., *Nat Commun*(2023). Dec 20;14(1):8459](https://www.nature.com/articles/s41587-024-02182-7) method to construct the TF-CRE-Target prior network
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+pfmList = readRDS(file = "/mnt/data/home/tycloud/database/JASPAR2024_pfmList_human.rds")
+peaks = readRDS(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/peaks.rds")
+Genes = readRDS(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/Genes.rds")
+
+generate_GRN(peaks = peaks, 
+             Genes = Genes,
+             input = "/mnt/data/home/tycloud/workspace/paper_code/LINGER/data/data_bulk/",
+             min_overlap = 300,
+             Start_ali = F,
+             motifList = pfmList,
+             method = "FIMO",
+             ncores = 12,
+             p_thresh=1e-5,
+             using_scan=F,
+             Gene_network="/mnt/data/home/tycloud/workspace/algorithms_raw/data/network_human.csv",
+             network_out="/mnt/data/home/tycloud/workspace/algorithms_raw/data/multiome_prior_network.csv")
+```
+
+## 3.1 save seob_ATAC_T and seob_T
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+seurat2anndata(obj = seob_T, 
+               outFile = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_T.h5ad", 
+               slot = 'counts', main_layer = 'RNA', 
+               transfer_layers = NULL, 
+               drop_single_values = FALSE)
+seurat2anndata(obj = seob_ATAC_T, 
+               outFile = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_ATAC_T.h5ad", 
+               slot = 'counts', main_layer = 'peaks', 
+               transfer_layers = NULL, 
+               drop_single_values = FALSE)
+```
+
+# 4 SEACells 
+To reduce the dimensionality, similarly characterized cells were clustered into one cell using the metacell method proposed by [Persad et al., *Nat Biotechnol*.2023 Dec;41(12):1746-1757 ](https://www.nature.com/articles/s41587-023-01716-9) 
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/python",
+           script_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/SEACells_proprecess.py",
+           rna_ad_path= "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_T.h5ad",
+           tmp="/mnt/data/home/tycloud/workspace/algorithms_raw/tmp/")
+
+execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/python",
+           script_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/SEACells_integrated.py",
+           rna_ad_path = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_T.h5ad",
+           atac_ad_path = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_ATAC_T.h5ad",
+           tmp = "/mnt/data/home/tycloud/workspace/algorithms_raw/tmp/",
+           result_path = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/")
+
+
+
+```
+
+
+## 4.1 RunSeurat with SEACells
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+seob_T_SEACells = fread(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/rna_mate_mat.csv",
+                        quote = F, data.table = F, header = T)%>%
+  column_to_rownames(var = "V1")
+seob_T_SEACells = seob_T_SEACells[, colnames(seob_T_SEACells)!="cellid"]
+seob_T_SEACells = t(seob_T_SEACells)
+seob_T_SEACells = CreateSeuratObject(counts = seob_T_SEACells)
+
+seob_T_SEACells = RunSeurat(seob_T_SEACells,
+                            split_by=NULL,
+                            coln_add=NULL,
+                            cellid_add=T,
+                            genes_add=NULL,
+                            integrated="no",
+                            integrated_assay="RNA",
+                            cellid=NULL,
+                            min_cells=3,
+                            min_features=200,
+                            max_features=0,
+                            MT_filter = 20,
+                            nfeatures=3000,
+                            npcs=30,
+                            resolution=0.5,
+                            k_anchor=5,
+                            k_filter=200,
+                            k_score=30,
+                            outfeatures=bad_genes,
+                            min_batch_num=NULL,
+                            k_weight=100)
+
+seob_T_SEACells@meta.data$seurat_clusters =
+  as.character(seob_T_SEACells@meta.data$seurat_clusters)
+DimPlot(seob_T_SEACells, reduction = "umap", group.by = "seurat_clusters",label = T)
+
+```
+
+## 4.2 Run pseudotime in SEACells by slingshot
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+pseudotime_ = Runslingshot(seob=seob_T_SEACells, 
+                           start='2', 
+                           end=c('0','1'),
+                           reduction="umap",
+                           cluster="seurat_clusters")
+```
+
+## 4.3 Run DEG in SEACells by MAST
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+exp_data = fread(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/scMultiome_mat.csv", quote = F,
+                 data.table = F)%>%column_to_rownames(var = "cellid")
+exp_data = t(exp_data)
+MAST_DEG(exp_data, 
+         pseudotime_lineages = pseudotime_, 
+         split_num=4,
+         log_=T,
+         out_dir = "result")
+```
+
+
+

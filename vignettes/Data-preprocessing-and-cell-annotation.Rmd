@@ -1,0 +1,126 @@
+---
+title: "Data-preprocessing-and-cell-annotation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Data-preprocessing-and-cell-annotation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+# 1 Data preprocessing
+
+We used snRNA-seq in mouse jaw masticatory muscles-tendon-bone E12-E16 scMutiome for the preprocessing demo, and the preprocessing demo for snATAC was placed in [Dynamic-network](./vignettes/Dynamic-network.Rmd)
+
+## 1.1 set R library loaction and load packages
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+.libPaths('~/R/x86_64-pc-linux-gnu-library/4.3/')
+library(ggplot2)
+library(devtools)
+library(tidyverse)
+library(pheatmap)
+```
+
+## 1.2 load LineageNet
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+library(LineageNet)
+```
+
+## 1.3 set color
+
+```{r eval = TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+my_pal_science6 = c("#A9CA70","#C5D6F0","#F18C54",
+                    "#9B59B6","#F7CAC9","#76D7C4")
+```
+
+## 1.4 load test data
+
+We gave packing Seurat data for a mouse jaw masticatory muscles-tendon-bone E12-E16 scMutiome
+
+```{r eval = TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+data("bad_genes")
+
+seob = readRDS("/mnt/data/home/tycloud/workspace/scATAC/data/E12_E16_WT_Mand_RPCA_scRNA.rds")
+
+```
+
+## 1.5 Data quality control, dimensionality reduction, clustering
+
+```{r eval = TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+seob = RunSeurat(seob = seob,
+                 split_by="sample",
+                 integrated="RPCA",
+                 outfeatures = bad_genes,
+                 coln_add = "all",
+                 cellid=NULL,
+                 nfeatures=3000,
+                 min_cells = 3,
+                 min_features = 200,
+                 npcs=20,
+                 resolution=0.15,
+                 k_anchor=3,
+                 k_weight = 200,
+                 use_old_RNA = F,
+                 use_old_Seurat = F)
+```
+
+# 2 cell-annotation
+
+## 2.1 plot marker
+
+```{r eval = FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+plotDot(object = seob,
+        features=unique(c('Sox9', 'Col2a1',
+                          'Pecam1','Cdh5',
+                          'Krt14','Epcam',
+                          'Plp1','Sox10',
+                          'Mitf',
+                          'Prrx1', 'Twist1',
+                          'Myod1','Myog')),
+        mode=1, ID=c('celltype'),
+        out_ID = c('celltype'),
+        my_pal = colorRampPalette(c(my_pal_science6))(7),
+        my_mal_gradientn = c("#4C3399","#F5F2EF","#FFE714"),
+        cluster_ID = F,
+        cluster_feature = F,
+        x_angle=45)
+```
+
+## 2.2 plot time and celltype
+
+```{r eval = TRUE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+DimPlot(seob, reduction = "umap", group.by = "sample",label = T)+
+  scale_color_manual(values = colorRampPalette(c("#F7903D", "#4D85BD", "#59A95A"))(5))
+DimPlot(seob, reduction = "umap", group.by = "celltype",label = T)+
+  scale_color_manual(values = colorRampPalette(c(my_pal_science6))(7))
+```
+
+# 3 monocle3 (optimal)
+
+```{r eval = FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+cds = Runmonocl3(seob = seob,
+                 cluster="seurat_clusters",
+                 ncenter = 500)
+cds <- order_cells(cds)
+```
+
+# 3.1 plot
+
+```{r eval = FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+plot_cells(cds,
+           color_cells_by = "seurat_clusters",
+           label_cell_groups=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           graph_label_size=1.5)+
+  scale_color_manual(values = colorRampPalette(c(my_pal_science6))(length(unique(seob@meta.data$seurat_clusters))))
+
+plot_cells(cds,
+           color_cells_by = "pseudotime",
+           label_cell_groups=FALSE,
+           label_leaves=FALSE,
+           label_branch_points=FALSE,
+           graph_label_size=1.5)
+
+```
