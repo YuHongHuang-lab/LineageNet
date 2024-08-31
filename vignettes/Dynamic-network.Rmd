@@ -266,6 +266,7 @@ pseudotime_ = Runslingshot(seob=seob_T_SEACells,
                            end=c('0','1'),
                            reduction="umap",
                            cluster="seurat_clusters")
+write.csv("result/pseudotime_lineages.csv")
 ```
 
 ## 4.3 Run DEG in SEACells by MAST
@@ -278,6 +279,34 @@ MAST_DEG(exp_data,
          split_num=4,
          log_=T,
          out_dir = "result")
+```
+
+#* DGRN
+#** DGRN_Mat_prepare
+param 1 scMultiome_mat.csv
+param 2 pseudotime_lineages.csv
+param 3 result/DEgenes_MAST_sp4_0to1.csv
+param 4 result/DEgenes_MAST_sp4_0to2.csv
+param 5 result/HVGenes_Peaks.csv
+param 6 result/adata_scMultiome_SEACells.h5ad
+
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/python",
+           script_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/DGRN_Mat_prepare.py",
+           param_1 = "result/scMultiome_mat.csv",
+           param_2 = "result/pseudotime_lineages.csv",
+           param_3 = "result/DEgenes_MAST_sp4_0to1.csv",
+           param_4 = "result/DEgenes_MAST_sp4_0to2.csv",
+           param_5 = "result/HVGenes_Peaks.csv",
+           param_6 = "result/adata_scMultiome_SEACells.h5ad")
+```
+
+## Run DGRN
+```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/python",
+           script_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/Run_DGRN.py",
+           param_1 = "result/adata_scMultiome_SEACells.h5ad",
+           param_2 ="/mnt/data/home/tycloud/workspace/algorithms_raw/data/multiome_prior_network.csv")
 ```
 
 

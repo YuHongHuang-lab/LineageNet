@@ -5,7 +5,7 @@ Author:
   - Xiao Zhai
   - Tao Song
 data: "2024/8/25"
-output: "html_document"
+output: "github_document"
 ---
 
 # The LineageNet
@@ -22,4 +22,8 @@ We have encapsulated the above methods into an R package called LineageNet. Line
 
 # Installation
 
-You can install the development version of LineageNet like so: install from github
+You can install the development version of LineageNet like so: install from github:
+
+devtools::install_github("YuHongHuang-lab/LineageNet") 
+
+
