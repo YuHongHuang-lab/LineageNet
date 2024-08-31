@@ -21,7 +21,7 @@ def data_preparation(input_expData: Union[str, sc.AnnData, pd.DataFrame],
                      genes_DE: Optional[Union[str, pd.DataFrame, pd.Series]] = None,
                      additional_edges_pct: float = 0.01) -> dict[str: AnnData]:
     """
-    Prepare the data object for CEFCON.
+    Prepare the data object for DGRN.
     """
 
     print('[0] - Data loading and preprocessing...')

@@ -13,7 +13,7 @@ Here we utilize [human peripherology single-cell multi-omics](https://www.10xgen
 
 ## 1.1 set R library loaction and load packages
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 .libPaths('~/R/x86_64-pc-linux-gnu-library/4.3/')
 reticulate::use_condaenv("/mnt/data/home/tycloud/software/anaconda3/envs/scFates/")
 Sys.setenv(RETICULATE_PYTHON = "/mnt/data/home/tycloud/software/anaconda3/envs/scFates/bin/python3")
@@ -31,7 +31,7 @@ library(TFBSTools)
 
 ## 1.2 load LineageNet
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 library(LineageNet)
 ```
 
@@ -39,13 +39,13 @@ library(LineageNet)
 
 The preprocessing and analysis of snRNA-seq is explained in [Data-preprocessing-and-cell-annotation](./vignettes/Data-preprocessing-and-cell-annotation.Rmd), and here we directly give the example data after processing
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 seob_T = readRDS(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_T.rds")
 ```
 
 ## 1.4 snATAC
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 counts <- Read10X_h5(filename = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/pbmc_granulocyte_sorted_10k_filtered_feature_bc_matrix.h5")
 counts = counts$Peaks
 metadata <- read.csv(
@@ -124,7 +124,7 @@ Here we simulate the process of T lymphocyte regeneration in human peripheral bl
 
 ## 2.1 select T cell
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 seob_ATAC_T = subset(pbmc, cells=colnames(seob_T))
 seob_ATAC_T@meta.data$celltype = seob_T@meta.data[rownames(seob_ATAC_T@meta.data),
                                                   "celltype"]
@@ -149,7 +149,7 @@ seob_ATAC_T <- NormalizeData(
 
 ## 2.2 Differential expression of Genes and peaks
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 #DEpeak
 Idents(seob_ATAC_T) = seob_ATAC_T@meta.data$celltype
 DEpeak = FindAllMarkers(seob_ATAC_T,
@@ -168,7 +168,7 @@ Genes = unique(c(DEG$gene, HVG))
 
 We utilize [Qiuyue Yuan, Zhana Duren., *Nat Biotechnol*(2024). Apr 12](https://www.nature.com/articles/s41587-024-02182-7) and [Wang et al., *Nat Commun*(2023). Dec 20;14(1):8459](https://www.nature.com/articles/s41587-024-02182-7) method to construct the TF-CRE-Target prior network
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 pfmList = readRDS(file = "/mnt/data/home/tycloud/database/JASPAR2024_pfmList_human.rds")
 peaks = readRDS(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/peaks.rds")
 Genes = readRDS(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/Genes.rds")
@@ -188,7 +188,7 @@ generate_GRN(peaks = peaks,
 ```
 
 ## 3.1 save seob_ATAC_T and seob_T
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 seurat2anndata(obj = seob_T, 
                outFile = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_T.h5ad", 
                slot = 'counts', main_layer = 'RNA', 
@@ -203,7 +203,7 @@ seurat2anndata(obj = seob_ATAC_T,
 
 # 4 SEACells 
 To reduce the dimensionality, similarly characterized cells were clustered into one cell using the metacell method proposed by [Persad et al., *Nat Biotechnol*.2023 Dec;41(12):1746-1757 ](https://www.nature.com/articles/s41587-023-01716-9) 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/python",
            script_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/SEACells_proprecess.py",
            rna_ad_path= "/mnt/data/home/tycloud/workspace/algorithms_raw/data/PMBC_T.h5ad",
@@ -223,7 +223,7 @@ execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/py
 
 ## 4.1 RunSeurat with SEACells
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 seob_T_SEACells = fread(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/rna_mate_mat.csv",
                         quote = F, data.table = F, header = T)%>%
   column_to_rownames(var = "V1")
@@ -260,7 +260,7 @@ DimPlot(seob_T_SEACells, reduction = "umap", group.by = "seurat_clusters",label 
 ```
 
 ## 4.2 Run pseudotime in SEACells by slingshot
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 pseudotime_ = Runslingshot(seob=seob_T_SEACells, 
                            start='2', 
                            end=c('0','1'),
@@ -270,7 +270,7 @@ write.csv("result/pseudotime_lineages.csv")
 ```
 
 ## 4.3 Run DEG in SEACells by MAST
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 exp_data = fread(file = "/mnt/data/home/tycloud/workspace/algorithms_raw/data/scMultiome_mat.csv", quote = F,
                  data.table = F)%>%column_to_rownames(var = "cellid")
 exp_data = t(exp_data)
@@ -281,8 +281,8 @@ MAST_DEG(exp_data,
          out_dir = "result")
 ```
 
-#* DGRN
-#** DGRN_Mat_prepare
+# 5 DGRN
+## 5.1 DGRN_Mat_prepare
 param 1 scMultiome_mat.csv
 param 2 pseudotime_lineages.csv
 param 3 result/DEgenes_MAST_sp4_0to1.csv
@@ -290,7 +290,7 @@ param 4 result/DEgenes_MAST_sp4_0to2.csv
 param 5 result/HVGenes_Peaks.csv
 param 6 result/adata_scMultiome_SEACells.h5ad
 
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/python",
            script_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/DGRN_Mat_prepare.py",
            param_1 = "result/scMultiome_mat.csv",
@@ -301,8 +301,8 @@ execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/py
            param_6 = "result/adata_scMultiome_SEACells.h5ad")
 ```
 
-## Run DGRN
-```{r echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
+## 5.2 Run DGRN
+```{r eval=FALSE, echo=TRUE, message=TRUE, warning=TRUE, include=TRUE}
 execute_py(python_path = "/mnt/data/home/tycloud/mambaforge/envs/seacells/bin/python",
            script_path = "/mnt/data/home/tycloud/workspace/LineageNet/LineageNet/python/Run_DGRN.py",
            param_1 = "result/adata_scMultiome_SEACells.h5ad",

@@ -5,7 +5,6 @@ import pandas as pd
 from scipy import sparse
 import scanpy as sc
 import os
-import cefcon as cf
 
 # scMultiome_mat_file_path = "data/scMultiome_mat.csv"
 # pseudotime_lineages_path = "result/pseudotime_lineages.csv"

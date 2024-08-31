@@ -26,7 +26,7 @@ from torch_geometric.utils import (
 )
 from torch_geometric.data import Data
 
-from .cefcon_result_object import CefconResults
+from .DGRN_result_object import DGRNResults
 
 
 class GraphAttention_layer(MessagePassing):
@@ -567,12 +567,12 @@ class NetModel(object):
     def get_lineagenet_results(self,
                            keep_self_loops: bool = True,
                            edge_threshold_avgDegree: Optional[int] = 10,
-                           edge_threshold_zscore: Optional[float] = None) -> CefconResults:
+                           edge_threshold_zscore: Optional[float] = None) -> DGRNResults:
 
         network = self.get_network(keep_self_loops, edge_threshold_avgDegree, edge_threshold_zscore)
         gene_embedding = self.get_gene_embedding()
 
-        results = CefconResults(adata=self._adata,
+        results = DGRNResults(adata=self._adata,
                                 network=network,
                                 gene_embedding=gene_embedding)
 
